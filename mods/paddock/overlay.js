@@ -8,13 +8,13 @@
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { props, closeOverlay, openOverlay, run, theme, shared, setShared, exec, home, pickFolder } from "herdr";
-import { projectList, addProject, removeProject, editProject, taken } from "./projects.js";
+import { projectList, addProject, removeProject, editProject } from "./projects.js";
 
 export const STORE = "paddock.projects";
 export const store = () => shared(STORE) ?? {};
 export const project = (machine, id) => projectList(store(), machine).find((p) => p.id === id);
 // An omitted machine follows the focused space, even for a local project.
-export const newSpaceIn = (p, machine) => run("space.new", { folder: p.root, machine: machine ?? "" });
+export const newSpaceIn = (p, machine) => run("space.new", { ...(p.root ? { folder: p.root } : {}), machine: machine ?? "" });
 
 // A folder's real path on its machine, or null when there's none. There, the shell
 // expands "~" and resolves the path. Here, a program can't start in a missing folder
@@ -83,16 +83,15 @@ export class Overlay {
     const p = props();
     if (this.busy) return;
     const path = this.path.value().trim(), name = this.name?.value().trim() ?? "";
-    if (!path) { this.error = "Type the folder's path."; cx.notify(); return; }
+    if (!path && !name) { this.error = "Enter a name or a folder."; cx.notify(); return; }
     const was = p.role === "edit" ? project(p.machine, p.id) : null;
     this.busy = true;
     cx.notify();
     cx.spawn(async (cx) => {
       // An unchanged folder isn't asked for again (its machine may be away).
-      const root = was && path === was.root ? was.root : await existing(path, p.machine);
+      const root = !path ? null : path === was?.root ? was.root : await existing(path, p.machine);
       this.busy = false;
-      if (!root) { this.error = `No folder at ${path}${p.machine ? ` on ${p.machine}` : ""}.`; cx.notify(); return; }
-      if (taken(store(), p.machine, root, was?.id ?? null)) { this.error = "Another project has this folder."; cx.notify(); return; }
+      if (path && !root) { this.error = `No folder at ${path}${p.machine ? ` on ${p.machine}` : ""}.`; cx.notify(); return; }
       setShared(STORE, was ? editProject(store(), p.machine, p.id, { name, root }) : addProject(store(), p.machine, root, { name }));
       closeOverlay(p.overlay);
     });
@@ -141,8 +140,8 @@ export class Overlay {
       .child(h_flex().items_center()
         .child(div().flex_1().text_size(15).font_semibold().child(edit ? "Edit project" : p.machine ? `New project on ${p.machine}` : "New project"))
         .child(div().text_size(11).text_color(t.dim).child("Esc")))
-      .child(field("Name", this.name, edit ? "Empty goes back to the folder's name." : "Empty: the folder's name."))
-      .child(field("Folder", this.path, p.machine ? `A path on ${p.machine}, such as ~/code/app.` : "Spaces working in it belong to the project; its + opens one there.", choose))
+      .child(field("Name", this.name, "Required only without a folder."))
+      .child(field("Folder (optional)", this.path, p.machine ? `A path on ${p.machine}, such as ~/code/app.` : null, choose))
       .when(Boolean(this.error), (el) => el.child(div().text_size(12).text_color(t.blocked).child(this.error)))
       .child(h_flex().pt(4).gap(8).justify_end()
         .child(button("pd-cancel", "Cancel", false, () => closeOverlay(p.overlay)))

@@ -1,5 +1,5 @@
 // node tests/projects.test.mjs: the project list and grouping spaces into it.
-import { repoRoot, norm, inside, addProject, removeProject, editProject, taken, prunePlaced, reorderProject, placeSpace, placedOf, projectList, projectFor, groupRows, reposToAdd, urgent, fromSpaceFolders } from "../mods/paddock/projects.js";
+import { repoRoot, norm, inside, addProject, removeProject, editProject, prunePlaced, reorderProject, placeSpace, placedOf, projectList, projectFor, groupRows, reposToAdd, urgent, fromSpaceFolders } from "../mods/paddock/projects.js";
 import { byParent, tree, kidStatus, duration, hookSubs, joinSubs, sameApp, HOOK_MAX_AGE } from "../mods/paddock/agents-data.js";
 
 let bad = 0, count = 0;
@@ -30,7 +30,8 @@ s = addProject(s, null, "/w/notes");
 s = addProject(s, "vps", "/home/u/app", { auto: true });
 check("added", projectList(s, null).map((p) => [p.name, p.auto]), [["app", true], ["notes", false]]);
 check("per machine", projectList(s, "vps").map((p) => p.root), ["/home/u/app"]);
-check("no duplicate", projectList(addProject(s, null, "/w/app/"), null).length, 2);
+check("manual projects may share a folder", projectList(addProject(s, null, "/w/app/"), null).length, 3);
+check("repo discovery still skips an existing folder", addProject(s, null, "/w/app/", { auto: true }), s);
 const app = projectList(s, null)[0];
 check("renamed", projectList(editProject(s, null, app.id, { name: "Web" }), null)[0].name, "Web");
 check("rename to empty goes back to the folder", projectList(editProject(s, null, app.id, { name: "" }), null)[0].name, "app");
@@ -101,11 +102,19 @@ const sf = JSON.stringify({ list: [{ id: "f1", name: "Work", path: "~\\code\\wor
 check("from space-folders", fromSpaceFolders(sf, "C:\\Users\\dev"), [{ root: "C:\\Users\\dev\\code\\work", name: "Work" }, { root: "/srv/x", name: "Abs" }]);
 check("from a broken file", fromSpaceFolders("{", "/home/dev"), []);
 
-// Edit: a folder another project has is refused; the old folder is remembered.
+// Editing allows shared folders and remembers the last project to leave a folder.
 const twoP = addProject(addProject({}, null, "/w/one"), null, "/w/two");
 const [p1, p2] = projectList(twoP, null);
-check("edit onto another project's folder is refused", editProject(twoP, null, p1.id, { root: "/w/two" }), twoP);
-check("taken", [taken(twoP, null, "/w/two/"), taken(twoP, null, "/w/two", p2.id), taken(twoP, null, "/w/three")], [true, false, false]);
+const sharedFolder = editProject(twoP, null, p1.id, { root: "/w/two" });
+check("editing onto a shared folder preserves distinct IDs", projectList(sharedFolder, null).map(({ id, root }) => [id, root]), [[p1.id, "/w/two"], [p2.id, "/w/two"]]);
+check("first matching project wins automatic grouping", projectFor(projectList(sharedFolder, null), { place: "/w/two/src" }).id, p1.id);
+check("removing one duplicate leaves the shared folder discoverable", removeProject(sharedFolder, null, p1.id)[""].removed, ["/w/one"]);
+const withoutFolder = editProject(placeSpace(twoP, null, "s1", p1.id), null, p1.id, { root: null, name: "Tasks" });
+check("clearing a folder keeps the ID and name", projectList(withoutFolder, null)[0], { ...p1, root: null, name: "Tasks" });
+check("folderless projects accept explicit placements only", groupRows(projectList(withoutFolder, null), [{ w: { id: "s1" } }, { w: { id: "s2" }, place: "/w/one" }], placedOf(withoutFolder, null)).projects[0].rows.map(({ w }) => w.id), ["s1"]);
+check("removing a folderless project records no empty folder", removeProject(withoutFolder, null, p1.id)[""].removed, ["/w/one"]);
+check("create a named project without a folder", projectList(addProject({}, null, null, { name: "Tasks" }), null).map(({ root, name }) => [root, name]), [[null, "Tasks"]]);
+check("require a name when there is no folder", addProject({}, null, null), {});
 const moved = editProject(twoP, null, p1.id, { root: "/w/uno" });
 check("moved folder remembered", moved[""].removed, ["/w/one"]);
 check("the old repo isn't added back by itself", projectList(addProject(moved, null, "/w/one", { auto: true }), null).length, 2);
