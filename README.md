@@ -13,15 +13,18 @@ A mod for the [Herdr](https://herdr.dev) desktop app. It replaces the shipped
 
 ## What it does
 
-- **Projects.** A project is a folder on one machine. A git repository a space opens
-  in becomes one by itself (its worktrees join it); **New project** (the folder-plus
-  button by "Spaces" or by a machine) adds any folder, with a name. Projects stay
+- **Projects.** A project belongs to one machine and can have an optional folder.
+  Several projects can share a folder. A git repository a space opens in becomes
+  a project if its folder isn't already listed. Use **New project** (the folder-plus
+  button by "Spaces" or by a machine) to add one. Projects stay
   when their spaces close, dimmed, so their **+** can open one again.
 - **Which project a space is in:** its repository's, else the deepest project folder
-  holding where it works now. Drag a space onto a project to put it there, or onto
+  holding where it works now. If projects share a folder, the first one in the list
+  gets matches automatically. Drag a space onto any project, including one without
+  a folder, to put it there, or onto
   the dashed "Drop here to take it out of its project" zone to take it out.
 - **A project's row:** fold it, drag it to reorder, **+** (on hover) for a new space
-  in its folder, right-click for **New space here**, **Edit project…** (name and
+  in its folder (or the machine's default location), right-click for **New space here**, **Edit project…** (name and
   folder) and **Remove project** (the folder and its spaces stay). Folded, it shows
   a spinner when an agent inside works and a dot when one needs you or is done.
 - **Agents under their space:** a light in the theme's status colors (needs you,

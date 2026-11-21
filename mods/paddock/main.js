@@ -359,6 +359,7 @@ export default class Spaces extends View {
   // (see checkNew); until it answers, a project found from a repo, or holding a
   // space in one, is taken for one.
   isRepo(p) {
+    if (!p.root) return false;
     const key = JSON.stringify([p.machine ?? null, p.root]), k = this.repoOf[key];
     // Asked once, again after 10 minutes (a git init), or a minute after it couldn't be.
     const age = k ? Date.now() - k.at : Infinity;

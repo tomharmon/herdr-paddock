@@ -46,16 +46,12 @@ const newId = (root, list) => {
   return id;
 };
 
-// Whether another project of the machine has this folder already.
-export const taken = (store, machine, root, except = null) =>
-  entry(store, machine).list.some((p) => p.id !== except && norm(p.root) === norm(root));
-
-// The store with a project added (no change when its folder is listed already).
-// `auto`: found from a repo a space opened in; one the person removed stays out.
+// Only repo discovery deduplicates by folder; manually added projects have their own IDs.
 export function addProject(store, machine, root, { name, auto = false } = {}) {
   const e = entry(store, machine);
-  if (e.list.some((p) => norm(p.root) === norm(root))) return store;
-  if (auto && e.removed.some((r) => norm(r) === norm(root))) return store;
+  root = root || null;
+  if (!root && (!name || auto)) return store;
+  if (auto && (e.list.some((p) => norm(p.root) === norm(root)) || e.removed.some((r) => norm(r) === norm(root)))) return store;
   const list = [...e.list, { id: newId(root, e.list), root, name: name || baseName(root), auto }];
   const removed = auto ? e.removed : e.removed.filter((r) => norm(r) !== norm(root));
   return put(store, machine, { ...e, list, removed });
@@ -67,21 +63,25 @@ export function removeProject(store, machine, id) {
   const e = entry(store, machine), p = e.list.find((x) => x.id === id);
   if (!p) return store;
   const of = Object.fromEntries(Object.entries(e.of).filter(([, v]) => v !== id));
-  return put(store, machine, { list: e.list.filter((x) => x.id !== id), removed: [...e.removed.filter((r) => norm(r) !== norm(p.root)), p.root], of });
+  const list = e.list.filter((x) => x.id !== id);
+  const removed = rememberFolder(e.removed, list, p.root);
+  return put(store, machine, { list, removed, of });
 }
 
-// A new name and folder; an empty name goes back to the folder's.
-// A new name and folder; an empty name goes back to the folder's. A folder another
-// project has is refused (no change). The folder left behind is remembered as
-// removed, so a repo there isn't added back by itself.
+function rememberFolder(removed, list, root) {
+  if (!root || list.some((p) => norm(p.root) === norm(root)) || removed.some((r) => norm(r) === norm(root))) return removed;
+  return [...removed, root];
+}
+
+// Omit root to keep it; pass null to clear it without changing the project ID.
 export function editProject(store, machine, id, { name, root }) {
   const e = entry(store, machine), p = e.list.find((x) => x.id === id);
   if (!p) return store;
-  const to = root || p.root;
-  if (taken(store, machine, to, id)) return store;
+  const to = root === undefined ? p.root : root || null;
+  if (!to && !name) return store;
   const moved = norm(to) !== norm(p.root);
-  const removed = moved ? [...e.removed.filter((r) => norm(r) !== norm(p.root) && norm(r) !== norm(to)), p.root] : e.removed;
   const list = e.list.map((x) => (x.id === id ? { ...x, root: to, name: name || baseName(to) } : x));
+  const removed = moved ? rememberFolder(e.removed.filter((r) => norm(r) !== norm(to)), list, p.root) : e.removed;
   return put(store, machine, { ...e, list, removed });
 }
 
